@@ -5,13 +5,15 @@ import {
   Bell,
   Shield,
   User,
+  Users,
+  BarChart3,
   LogOut,
   Calendar,
   AlertTriangle,
   FileText,
   Volume2,
 } from "lucide-react";
-import { Job, Equipment, SystemNotification, UserRole } from "./types";
+import { Job, Equipment, SystemNotification, UserRole, Customer } from "./types";
 import {
   initAuth,
   googleSignIn,
@@ -21,15 +23,19 @@ import {
 import DashboardView from "./components/DashboardView";
 import JobsView from "./components/JobsView";
 import EquipmentsView from "./components/EquipmentsView";
+import CustomersView from "./components/CustomersView";
+import AnalyticsView from "./components/AnalyticsView";
 import BackupHub from "./components/BackupHub";
+import KingcomLogo from "./components/KingcomLogo";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "equipments" | "security">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "equipments" | "customers" | "analytics" | "security">("dashboard");
 
   // Core DB States
   const [jobs, setJobs] = useState<Job[]>([]);
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
 
   // Auth states
@@ -72,6 +78,7 @@ export default function App() {
         setJobs(data.jobs || []);
         setEquipments(data.equipments || []);
         setNotifications(data.notifications || []);
+        setCustomers(data.customers || []);
         setLogs(data.logs || []);
       }
     } catch (err) {
@@ -80,7 +87,13 @@ export default function App() {
   };
 
   // Persists local React state back to our Express Node server
-  const saveDb = async (updatedJobs: Job[], updatedEqs: Equipment[], updatedNotifs: SystemNotification[], updatedLogs: any[]) => {
+  const saveDb = async (
+    updatedJobs: Job[],
+    updatedEqs: Equipment[],
+    updatedNotifs: SystemNotification[],
+    updatedLogs: any[],
+    updatedCustomers: Customer[] = customers
+  ) => {
     try {
       await fetch("/api/db", {
         method: "POST",
@@ -90,6 +103,7 @@ export default function App() {
           equipments: updatedEqs,
           notifications: updatedNotifs,
           logs: updatedLogs,
+          customers: updatedCustomers,
         }),
       });
     } catch (err) {
@@ -156,6 +170,30 @@ export default function App() {
     setJobs(updatedJobs);
     addAuditLog("Job Deleted", currentRole, `ลบใบงานออกถาวร (${jobId})`);
     saveDb(updatedJobs, equipments, notifications, logs);
+  };
+
+  // Customer Actions
+  const handleCreateCustomer = (newCustomer: Customer) => {
+    const updated = [newCustomer, ...customers];
+    setCustomers(updated);
+    addAuditLog("Customer Created", currentRole, `เพิ่มลูกค้าใหม่ ${newCustomer.name}`);
+    saveDb(jobs, equipments, notifications, logs, updated);
+  };
+
+  const handleUpdateCustomer = (updatedCustomer: Customer) => {
+    const updated = customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c));
+    setCustomers(updated);
+    addAuditLog("Customer Updated", currentRole, `แก้ไขข้อมูลลูกค้า ${updatedCustomer.name}`);
+    saveDb(jobs, equipments, notifications, logs, updated);
+  };
+
+  const handleDeleteCustomer = (customerId: string) => {
+    const target = customers.find((c) => c.id === customerId);
+    const nameStr = target ? target.name : customerId;
+    const updated = customers.filter((c) => c.id !== customerId);
+    setCustomers(updated);
+    addAuditLog("Customer Deleted", currentRole, `ลบลูกค้าออกถาวร ${nameStr}`);
+    saveDb(jobs, equipments, notifications, logs, updated);
   };
 
   // Scanned Hardware Actions inside jobs
@@ -373,18 +411,12 @@ export default function App() {
       {/* Top Navbar / Professional Polish Corporate Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-3.5 shrink-0 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl font-sans shrink-0">
-              AF
-            </div>
-            <div>
-              <span className="text-lg font-bold tracking-tight text-slate-800 font-sans">
-                AssetFlow <span className="text-blue-600">Professional</span>
-              </span>
-              <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">
-                ระบบจัดการสติกเกอร์และประวัติใบงานติดตั้งอัจฉริยะ
-              </p>
-            </div>
+          <div className="flex items-center gap-4">
+            <KingcomLogo />
+            <div className="hidden sm:block w-px h-8 bg-slate-200"></div>
+            <p className="hidden sm:block text-[11px] text-slate-500 font-semibold max-w-[220px] leading-tight">
+              ระบบจัดการคลังฮาร์ดแวร์และประวัติใบงานติดตั้งอัจฉริยะ
+            </p>
           </div>
 
           {/* FCM Simulated Alerts triggers */}
@@ -456,7 +488,7 @@ export default function App() {
       {/* Primary Sub Navigation Tabs */}
       <nav className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto">
-          {(["dashboard", "jobs", "equipments", "security"] as const).map((tab) => (
+          {(["dashboard", "jobs", "equipments", "customers", "analytics", "security"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -481,6 +513,16 @@ export default function App() {
                   <Layers className="w-4.5 h-4.5" /> ฐานข้อมูลคลังอุปกรณ์
                 </>
               )}
+              {tab === "customers" && (
+                <>
+                  <Users className="w-4.5 h-4.5" /> ทะเบียนรายชื่อลูกค้า
+                </>
+              )}
+              {tab === "analytics" && (
+                <>
+                  <BarChart3 className="w-4.5 h-4.5" /> รายงาน & วิเคราะห์
+                </>
+              )}
               {tab === "security" && (
                 <>
                   <Shield className="w-4.5 h-4.5" /> ระบบหลังบ้าน & ความปลอดภัย
@@ -498,6 +540,7 @@ export default function App() {
             jobs={jobs}
             equipments={equipments}
             notifications={notifications}
+            customers={customers}
             onSelectJob={handleSelectJobFromDashboard}
             onNavigateToTab={(t) => setActiveTab(t as any)}
             onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
@@ -529,6 +572,28 @@ export default function App() {
           />
         )}
 
+        {activeTab === "customers" && (
+          <CustomersView
+            customers={customers}
+            jobs={jobs}
+            onCreateCustomer={handleCreateCustomer}
+            onUpdateCustomer={handleUpdateCustomer}
+            onDeleteCustomer={handleDeleteCustomer}
+            onSelectCustomerForJob={(customer) => {
+              // Automatically switch to jobs, maybe we can pre-select something or just navigate
+              setActiveTab("jobs");
+            }}
+          />
+        )}
+
+        {activeTab === "analytics" && (
+          <AnalyticsView
+            jobs={jobs}
+            equipments={equipments}
+            customers={customers}
+          />
+        )}
+
         {activeTab === "security" && (
           <BackupHub
             currentRole={currentRole}
@@ -548,7 +613,7 @@ export default function App() {
         </div>
         <div className="flex gap-4">
           <span>Technician Node: BKK-01</span>
-          <span>© 2026 AssetFlow Systems</span>
+          <span>© 2026 KINGCOM Computer Shop</span>
         </div>
       </footer>
     </div>

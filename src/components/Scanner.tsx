@@ -23,12 +23,38 @@ export default function Scanner({
   const [manualInput, setManualInput] = useState(false);
 
   // Parsed Form fields
-  const [brand, setBrand] = useState("");
+  const [category, setCategory] = useState("Camera");
+  const [brand, setBrand] = useState("Dahua");
   const [model, setModel] = useState("");
   const [serial, setSerial] = useState("");
   const [mac, setMac] = useState("");
   const [imei, setImei] = useState("");
+  const [ipAddress, setIpAddress] = useState("");
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [firmwareVersion, setFirmwareVersion] = useState("");
+  const [warrantyEnd, setWarrantyEnd] = useState(
+    new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  );
   const [notes, setNotes] = useState("");
+
+  const getBrandSuggestions = (cat: string): string[] => {
+    switch (cat) {
+      case "Camera":
+      case "NVR":
+      case "DVR":
+        return ["Dahua", "Hikvision", "UNV", "HiLook", "EZVIZ", "IMOU", "TP-Link VIGI", "Axis", "Hanwha", "Bosch", "Panasonic", "CP Plus", "Avtech", "Provision"];
+      case "Router":
+      case "Access Point":
+      case "ONU":
+        return ["MikroTik", "TP-Link", "Cisco", "Huawei", "Ruijie", "Ubiquiti", "DrayTek", "Zyxel"];
+      case "PoE Switch":
+      case "Switch":
+        return ["Ruijie", "TP-Link", "Dahua", "Hikvision", "Cisco", "Planet", "Ubiquiti"];
+      default:
+        return ["Other", "Kingcom"];
+    }
+  };
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const SCANNER_ID = "camera-scanner-view";
@@ -202,9 +228,14 @@ export default function Scanner({
       serialNumber: serial.trim(),
       macAddress: mac.trim() || undefined,
       imei: imei.trim() || undefined,
+      ipAddress: ipAddress.trim() || undefined,
+      username: username.trim() || undefined,
+      password: password.trim() || undefined,
+      firmwareVersion: firmwareVersion.trim() || undefined,
+      category: category as any,
       installationDate: new Date().toISOString().split("T")[0],
       warrantyStart: new Date().toISOString().split("T")[0],
-      warrantyEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      warrantyEnd: warrantyEnd || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       notes: notes.trim() || undefined,
       photos: photo ? [photo] : [],
     };
@@ -214,11 +245,15 @@ export default function Scanner({
     // Reset form
     setScanResult(null);
     setPhoto(null);
-    setBrand("");
+    setBrand("Dahua");
     setModel("");
     setSerial("");
     setMac("");
     setImei("");
+    setIpAddress("");
+    setUsername("admin");
+    setPassword("");
+    setFirmwareVersion("");
     setNotes("");
   };
 
@@ -328,17 +363,69 @@ export default function Scanner({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">ยี่ห้อ (Brand) *</label>
-                <input
-                  type="text"
+                <label className="block text-xs font-semibold text-slate-600 mb-1">หมวดหมู่อุปกรณ์ *</label>
+                <select
                   required
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="เช่น Mikrotik, Cisco, TP-Link"
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-                />
+                  value={category}
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    setCategory(cat);
+                    // Pre-select first brand from suggestions
+                    const suggestions = getBrandSuggestions(cat);
+                    if (suggestions.length > 0) {
+                      setBrand(suggestions[0]);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                >
+                  <option value="">-- เลือกหมวดหมู่ --</option>
+                  <option value="Camera">Camera (กล้องวงจรปิด)</option>
+                  <option value="NVR">NVR (เครื่องบันทึก NVR)</option>
+                  <option value="DVR">DVR (เครื่องบันทึก DVR)</option>
+                  <option value="HDD">HDD (ฮาร์ดดิสก์)</option>
+                  <option value="PoE Switch">PoE Switch (สวิตช์จ่ายไฟ)</option>
+                  <option value="Switch">Switch (เน็ตเวิร์กสวิตช์)</option>
+                  <option value="Router">Router (เร้าเตอร์)</option>
+                  <option value="ONU">ONU (ตัวแปลงไฟเบอร์)</option>
+                  <option value="Access Point">Access Point (จุดกระจายไวไฟ)</option>
+                  <option value="UPS">UPS (เครื่องสำรองไฟ)</option>
+                  <option value="Rack">Rack (ตู้แร็ค)</option>
+                  <option value="Patch Panel">Patch Panel (แผงกระจายสาย)</option>
+                  <option value="สาย LAN">สาย LAN (สายเน็ตเวิร์ก)</option>
+                  <option value="Fiber">Fiber (สายไฟเบอร์ออปติก)</option>
+                  <option value="Connector">Connector (หัวต่ออุปกรณ์)</option>
+                  <option value="Power Supply">Power Supply (แหล่งจ่ายไฟ)</option>
+                  <option value="อื่นๆ">อื่นๆ</option>
+                </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">ยี่ห้อ (Brand) *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="flex-1 px-2 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                  >
+                    {getBrandSuggestions(category).map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                    <option value="อื่นๆ">อื่นๆ (พิมพ์เองด้านล่าง)</option>
+                  </select>
+                </div>
+                {brand === "อื่นๆ" && (
+                  <input
+                    type="text"
+                    required
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="พิมพ์ยี่ห้อเอง..."
+                    className="w-full mt-2 px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">รุ่น (Model) *</label>
                 <input
@@ -347,43 +434,102 @@ export default function Scanner({
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder="เช่น hAP ac3, U6-Lite"
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Serial Number (S/N) *</label>
+                <input
+                  type="text"
+                  required
+                  value={serial}
+                  onChange={(e) => setSerial(e.target.value)}
+                  placeholder="กรอกหรือสแกน Serial Number"
+                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Serial Number (S/N) *</label>
-              <input
-                type="text"
-                required
-                value={serial}
-                onChange={(e) => setSerial(e.target.value)}
-                placeholder="กรอกหรือสแกน Serial Number"
-                className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-              />
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">MAC Address (ถ้ามี)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">MAC Address</label>
                 <input
                   type="text"
                   value={mac}
                   onChange={(e) => setMac(e.target.value)}
                   placeholder="เช่น AA:BB:CC:11:22:33"
-                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">IMEI (ถ้ามี)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">IP Address ของเครื่อง</label>
+                <input
+                  type="text"
+                  value={ipAddress}
+                  onChange={(e) => setIpAddress(e.target.value)}
+                  placeholder="เช่น 192.168.1.10"
+                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin"
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="รหัสผ่านเข้าเครื่อง"
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Version Firmware</label>
+                <input
+                  type="text"
+                  value={firmwareVersion}
+                  onChange={(e) => setFirmwareVersion(e.target.value)}
+                  placeholder="v1.2.3"
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">รหัส IMEI (ถ้ามี)</label>
                 <input
                   type="text"
                   value={imei}
                   onChange={(e) => setImei(e.target.value)}
                   placeholder="รหัส IMEI 15 หลัก"
-                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                  className="w-full px-3.5 py-2 font-mono text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">ประกันสิ้นสุด (หมดประกัน) *</label>
+                <input
+                  type="date"
+                  required
+                  value={warrantyEnd}
+                  onChange={(e) => setWarrantyEnd(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
                 />
               </div>
             </div>
@@ -424,7 +570,7 @@ export default function Scanner({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="เช่น การตั้งค่าเพิ่มเติม, อุปกรณ์เสริมที่ติดตั้ง"
                 rows={2}
-                className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 resize-none bg-white"
+                className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 resize-none bg-white text-slate-800"
               ></textarea>
             </div>
 

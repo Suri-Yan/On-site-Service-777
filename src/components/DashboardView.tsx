@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
   Briefcase,
   Layers,
@@ -10,15 +10,21 @@ import {
   Bell,
   CheckCircle,
   ExternalLink,
+  Users,
+  CheckSquare,
+  DollarSign,
+  ChevronLeft,
+  MapPin
 } from "lucide-react";
-import { Job, Equipment, SystemNotification } from "../types";
+import { Job, Equipment, SystemNotification, Customer } from "../types";
 
 interface DashboardViewProps {
   jobs: Job[];
   equipments: Equipment[];
   notifications: SystemNotification[];
+  customers: Customer[];
   onSelectJob: (job: Job) => void;
-  onNavigateToTab: (tab: string) => void;
+  onNavigateToTab: (tab: "dashboard" | "customers" | "jobs" | "equipments" | "analytics" | "security") => void;
   onMarkAllNotificationsRead: () => void;
 }
 
@@ -26,261 +32,328 @@ export default function DashboardView({
   jobs,
   equipments,
   notifications,
+  customers,
   onSelectJob,
   onNavigateToTab,
-  onMarkAllNotificationsRead,
+  onMarkAllNotificationsRead
 }: DashboardViewProps) {
   const todayStr = new Date().toISOString().split("T")[0];
-  const tomorrowObj = new Date();
-  tomorrowObj.setDate(tomorrowObj.getDate() + 1);
-  const tomorrowStr = tomorrowObj.toISOString().split("T")[0];
 
-  // Helper: check if date is in current week
-  const isThisWeek = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const firstDay = new Date(today.setDate(today.getDate() - today.getDay()));
-    const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 6));
-    return date >= firstDay && date <= lastDay;
-  };
+  // Selected date state for the interactive Job Calendar
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>(todayStr);
+  const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
 
-  // Job Filters
+  // Stats calculation
   const todayJobs = jobs.filter((job) => job.date === todayStr);
-  const tomorrowJobs = jobs.filter((job) => job.date === tomorrowStr);
-  const weekJobs = jobs.filter((job) => isThisWeek(job.date));
+  const completedJobs = jobs.filter((job) => job.status === "Completed");
+  const pendingJobs = jobs.filter((job) => job.status === "Pending");
+  const inProgressJobs = jobs.filter((job) => job.status === "In Progress");
+  const urgentJobs = jobs.filter((job) => job.jobType === "Emergency" && job.status !== "Completed");
 
-  const totalScanned = equipments.length;
-  const inProgressJobs = jobs.filter((job) => job.status === "In Progress").length;
-  const pendingJobs = jobs.filter((job) => job.status === "Pending").length;
-  const urgentJobs = jobs.filter((job) => job.jobType === "Emergency").length;
-
-  const handleOpenGoogleCalendar = () => {
-    window.open("https://calendar.google.com", "_blank");
+  // Revenue calculation
+  const getJobEstimatedRevenue = (job: Job) => {
+    if (job.revenue) return job.revenue;
+    switch (job.jobType) {
+      case "Installation":
+        return 18500;
+      case "Repair":
+        return 3500;
+      case "Maintenance":
+        return 5000;
+      case "Relocation":
+        return 4500;
+      case "Expansion":
+        return 9500;
+      case "Emergency":
+        return 6000;
+      default:
+        return 5000;
+    }
   };
+
+  const totalRevenue = jobs
+    .filter((j) => j.status === "Completed" || j.status === "In Progress")
+    .reduce((sum, j) => sum + getJobEstimatedRevenue(j), 0);
+
+  // Generate Calendar Days for Interactive Widget
+  const getDaysInMonth = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + currentMonthOffset);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+
+    const firstDayIndex = new Date(year, month, 1).getDay(); // Day of week (0-6)
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+
+    const days = [];
+
+    // Prev month days
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      days.push({
+        day: prevMonthTotalDays - i,
+        isCurrentMonth: false,
+        dateString: `${year}-${String(month).padStart(2, "0")}-${String(prevMonthTotalDays - i).padStart(2, "0")}`
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= totalDays; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: true,
+        dateString: `${year}-${String(month + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`
+      });
+    }
+
+    // Pad till multiple of 7
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: false,
+        dateString: `${year}-${String(month + 2).padStart(2, "0")}-${String(i).padStart(2, "0")}`
+      });
+    }
+
+    return { days, monthName: d.toLocaleDateString("th-TH", { month: "long", year: "numeric" }) };
+  };
+
+  const { days: calendarDays, monthName: currentMonthName } = getDaysInMonth();
+
+  // Jobs scheduled on the selected calendar date
+  const selectedDateJobs = jobs.filter((j) => j.date === selectedCalendarDate);
 
   return (
-    <div className="space-y-6">
-      {/* Visual Header Grid banner - Professional Polish Corporate Style */}
+    <div className="space-y-6 text-left" id="dashboard-view-container">
+      {/* Visual Header Banner */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-sm border border-slate-800">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
         <div className="relative z-10 max-w-xl">
           <span className="text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
-            ระบบบริหารตารางนัดหมายและสแกนอุปกรณ์
+            ระบบบริหารตารางนัดหมาย สแกนอุปกรณ์และเช็คลิสต์ช่างเทคนิค
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-3 text-slate-100">
-            สวัสดีช่างเทคนิค ยินดีต้อนรับสู่ระบบสแกน & จัดการใบงาน
+            แผงควบคุมระบบคิงคอม (Kingcom Core DB)
           </h1>
           <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-            สแกนอุปกรณ์และดึงข้อมูลอัจฉริยะ ซิงค์ใบงานนัดหมายตรงเข้า Google Calendar และจำลองแจ้งเตือนความคืบหน้าเรียลไทม์
+            ระบบประสานงานช่างภาคสนาม ติดตามงาน CCTV, LAN, WiFi, Fiber Optic, Access Control, Time Attendance, โซล่าเซลล์ และรายงานสรุป PM ประจำวัน
           </p>
 
           <div className="flex flex-wrap gap-3 mt-6">
             <button
               onClick={() => onNavigateToTab("jobs")}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg transition shadow-sm flex items-center gap-2 cursor-pointer"
+              className="px-5 py-2.5 bg-[#155dfc] hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-xl transition shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              <Briefcase className="w-4 h-4" /> เริ่มสแกน & บันทึกงาน
+              <Briefcase className="w-4 h-4" /> ตารางนัดหมาย & ดำเนินงาน
             </button>
             <button
-              onClick={handleOpenGoogleCalendar}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 active:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-semibold rounded-lg transition flex items-center gap-2 cursor-pointer"
+              onClick={() => onNavigateToTab("customers")}
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 active:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-semibold rounded-xl transition flex items-center gap-2 cursor-pointer"
             >
-              <Calendar className="w-4 h-4" /> เปิด Google Calendar <ExternalLink className="w-3 h-3 text-slate-500" />
+              <Users className="w-4 h-4" /> ฐานข้อมูลลูกค้า
             </button>
           </div>
         </div>
       </div>
 
-      {/* Top statistics overview row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-            <Layers className="w-6 h-6" />
+      {/* Grid of 8 stats requested by the user */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Stat 1: Today's jobs */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-blue-50 text-[#155dfc] rounded-xl shrink-0">
+            <Briefcase className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">อุปกรณ์ติดตั้งแล้ว</div>
-            <div className="text-2xl font-bold text-slate-900">{totalScanned} ตัว</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">จำนวนงานวันนี้</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{todayJobs.length} งาน</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-          <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-            <TrendingUp className="w-6 h-6" />
+        {/* Stat 2: In Progress Jobs */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl shrink-0">
+            <Clock className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">งานกำลังดำเนินการ</div>
-            <div className="text-2xl font-bold text-slate-900">{inProgressJobs} ใบ</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">งานค้าง / ดำเนินการ</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{inProgressJobs.length} งาน</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-lg">
-            <Clock className="w-6 h-6" />
+        {/* Stat 3: Completed Jobs */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-green-50 text-green-600 rounded-xl shrink-0">
+            <CheckSquare className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">งานรอช่างเข้าดำเนินการ</div>
-            <div className="text-2xl font-bold text-slate-900">{pendingJobs} ใบ</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">งานเสร็จสิ้นแล้ว</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{completedJobs.length} งาน</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition col-span-2 lg:col-span-1">
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-lg">
-            <AlertTriangle className="w-6 h-6" />
+        {/* Stat 4: Pending Jobs */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shrink-0">
+            <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">ใบงานด่วน / ฉุกเฉิน</div>
-            <div className="text-2xl font-bold text-slate-950">{urgentJobs} ใบ</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">งานรอดำเนินการ</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{pendingJobs.length} งาน</div>
+          </div>
+        </div>
+
+        {/* Stat 5: Revenue */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl shrink-0">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">รายได้ประมาณการ</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">฿{totalRevenue.toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* Stat 6: Total Customers */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl shrink-0">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">จำนวนลูกค้าสะสม</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{customers.length} รายการ</div>
+          </div>
+        </div>
+
+        {/* Stat 7: Total Installed Equipments */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl shrink-0">
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">จำนวนอุปกรณ์ติดตั้ง</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{equipments.length} ตัว</div>
+          </div>
+        </div>
+
+        {/* Stat 8: Urgent Emergency alarms */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 hover:shadow-sm transition">
+          <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl shrink-0">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase">คิวแจ้งเตือนฉุกเฉิน</div>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{urgentJobs.length} งาน</div>
           </div>
         </div>
       </div>
 
-      {/* Job Schedulers Tabs Section */}
+      {/* Main Grid: Interactive Calendar & Live Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: Today, Tomorrow, This Week Tasks */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-slate-900 text-lg">กำหนดการใบงาน</h2>
-            <button
-              onClick={() => onNavigateToTab("jobs")}
-              className="text-xs font-medium text-slate-500 hover:text-slate-900 flex items-center gap-0.5"
-            >
-              ดูใบงานทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+        {/* Interactive Calendar Widget (ปฏิทินงาน) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <CalendarIcon className="w-4.5 h-4.5 text-[#155dfc]" /> ปฏิทินจองเวลาและใบงาน (Job Calendar Schedule)
+            </h3>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setCurrentMonthOffset((prev) => prev - 1)}
+                className="p-1 text-slate-400 hover:text-slate-800 rounded hover:bg-slate-50 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-700 min-w-[120px] text-center">
+                {currentMonthName}
+              </span>
+              <button
+                onClick={() => setCurrentMonthOffset((prev) => prev + 1)}
+                className="p-1 text-slate-400 hover:text-slate-800 rounded hover:bg-slate-50 cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            {/* Today Block */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md">
-                  งานวันนี้ ({todayJobs.length})
-                </span>
-                <span className="text-xs font-mono text-slate-400">{todayStr}</span>
-              </div>
-              {todayJobs.length === 0 ? (
-                <p className="text-xs text-slate-400 py-3 text-center">ไม่มีงานตามกำหนดการในวันนี้</p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {todayJobs.map((job) => (
-                    <div
-                      key={job.id}
-                      onClick={() => onSelectJob(job)}
-                      className="py-3 first:pt-0 last:pb-0 flex items-center justify-between group cursor-pointer"
-                    >
-                      <div className="space-y-1">
-                        <div className="font-semibold text-sm text-slate-800 group-hover:text-blue-600 transition">
-                          {job.customerName}
-                        </div>
-                        <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                          <span className="font-mono flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" /> {job.startTime} - {job.endTime}
-                          </span>
-                          <span>•</span>
-                          <span>{job.jobType}</span>
-                        </div>
-                      </div>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                          job.status === "In Progress"
-                            ? "bg-blue-50 text-blue-600"
-                            : job.status === "Completed"
-                            ? "bg-green-50 text-green-600"
-                            : "bg-amber-50 text-amber-600"
-                        }`}
-                      >
-                        {job.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* Monthly grid */}
+          <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 pb-1 border-b border-slate-100">
+            <div>อา</div>
+            <div>จ</div>
+            <div>อ</div>
+            <div>พ</div>
+            <div>พฤ</div>
+            <div>ศ</div>
+            <div>ส</div>
+          </div>
 
-            {/* Tomorrow Block */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md">
-                  งานพรุ่งนี้ ({tomorrowJobs.length})
-                </span>
-                <span className="text-xs font-mono text-slate-400">{tomorrowStr}</span>
-              </div>
-              {tomorrowJobs.length === 0 ? (
-                <p className="text-xs text-slate-400 py-3 text-center">ไม่มีงานตามกำหนดการในวันพรุ่งนี้</p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {tomorrowJobs.map((job) => (
-                    <div
-                      key={job.id}
-                      onClick={() => onSelectJob(job)}
-                      className="py-3 first:pt-0 last:pb-0 flex items-center justify-between group cursor-pointer"
-                    >
-                      <div className="space-y-1">
-                        <div className="font-semibold text-sm text-slate-800 group-hover:text-blue-600 transition">
-                          {job.customerName}
-                        </div>
-                        <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                          <span className="font-mono flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {job.startTime} - {job.endTime}
-                          </span>
-                          <span>•</span>
-                          <span>{job.jobType}</span>
-                        </div>
-                      </div>
-                      <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-50 text-amber-600">
-                        {job.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((cell, idx) => {
+              const dateJobs = jobs.filter((j) => j.date === cell.dateString);
+              const isSelected = selectedCalendarDate === cell.dateString;
+              const isToday = todayStr === cell.dateString;
 
-            {/* Week Block */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">
-                  งานสัปดาห์นี้ ({weekJobs.length})
-                </span>
-                <span className="text-xs font-medium text-slate-400">ภายในสัปดาห์นี้</span>
-              </div>
-              {weekJobs.length === 0 ? (
-                <p className="text-xs text-slate-400 py-3 text-center">ไม่มีกำหนดการอื่นในสัปดาห์นี้</p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {weekJobs.map((job) => (
-                    <div
-                      key={job.id}
-                      onClick={() => onSelectJob(job)}
-                      className="py-3 first:pt-0 last:pb-0 flex items-center justify-between group cursor-pointer"
-                    >
-                      <div className="space-y-1">
-                        <div className="font-semibold text-sm text-slate-800 group-hover:text-blue-600 transition">
-                          {job.customerName}
-                        </div>
-                        <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                          <span className="font-mono flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" /> {job.date} | {job.startTime}
-                          </span>
-                          <span>•</span>
-                          <span>{job.jobType}</span>
-                        </div>
-                      </div>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                          job.status === "In Progress"
-                            ? "bg-blue-50 text-blue-600"
-                            : job.status === "Completed"
-                            ? "bg-green-50 text-green-600"
-                            : "bg-amber-50 text-amber-600"
-                        }`}
-                      >
-                        {job.status}
-                      </span>
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setSelectedCalendarDate(cell.dateString)}
+                  className={`py-3.5 rounded-xl text-center relative cursor-pointer transition flex flex-col items-center justify-center ${
+                    isSelected
+                      ? "bg-slate-900 text-white font-extrabold shadow-md"
+                      : cell.isCurrentMonth
+                      ? "bg-white hover:bg-slate-50 text-slate-800"
+                      : "bg-slate-50 text-slate-350"
+                  } ${isToday && !isSelected ? "ring-2 ring-blue-500 font-extrabold" : ""}`}
+                >
+                  <span className="text-xs">{cell.day}</span>
+                  {dateJobs.length > 0 && (
+                    <div className="absolute bottom-1.5 flex gap-0.5 justify-center">
+                      {dateJobs.map((j) => (
+                        <span
+                          key={j.id}
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            j.status === "Completed"
+                              ? "bg-emerald-500"
+                              : j.status === "In Progress"
+                              ? "bg-blue-500"
+                              : "bg-amber-500"
+                          }`}
+                        ></span>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })}
+          </div>
+
+          {/* Details of Selected Date jobs */}
+          <div className="pt-4 border-t border-slate-100">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+              รายการใบงานประจำวันที่: {new Date(selectedCalendarDate).toLocaleDateString("th-TH", { dateStyle: "long" })} ({selectedDateJobs.length} รายการ)
+            </h4>
+
+            {selectedDateJobs.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-2">ไม่มีกิจกรรมหรือใบงานนัดหมายในวันที่เลือก</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedDateJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    onClick={() => onSelectJob(job)}
+                    className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between text-xs cursor-pointer transition"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-800">{job.id} - {job.customerName}</div>
+                      <div className="text-slate-400 flex items-center gap-1.5 font-medium">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" /> {job.startTime} - {job.endTime} น. | {job.jobType}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -305,7 +378,7 @@ export default function DashboardView({
             {notifications.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-6">ไม่มีแจ้งเตือนใหม่ในระบบ</p>
             ) : (
-              <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-1">
+              <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
                 {notifications.map((notif) => (
                   <div
                     key={notif.id}
@@ -346,7 +419,7 @@ export default function DashboardView({
           {/* Quick reminder scheduler guidelines card */}
           <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
             <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-              <CheckCircle className="w-4.5 h-4.5 text-blue-600" />
+              <CheckCircle className="w-4.5 h-4.5 text-[#155dfc]" />
               ระบบตั้งเวลาเตือนความจำนัด
             </h4>
             <p className="text-[11px] text-slate-500 leading-relaxed mt-2">

@@ -1,4 +1,4 @@
-export type UserRole = "Admin" | "Manager" | "Technician";
+export type UserRole = "Admin" | "Manager" | "Technician" | "Viewer";
 
 export interface UserProfile {
   uid: string;
@@ -8,12 +8,36 @@ export interface UserProfile {
   photoURL?: string;
 }
 
+export type EquipmentCategory =
+  | "Camera"
+  | "NVR"
+  | "DVR"
+  | "HDD"
+  | "PoE Switch"
+  | "Switch"
+  | "Router"
+  | "ONU"
+  | "Access Point"
+  | "UPS"
+  | "Rack"
+  | "Patch Panel"
+  | "สาย LAN"
+  | "Fiber"
+  | "Connector"
+  | "Power Supply"
+  | "อื่นๆ";
+
 export interface Equipment {
   brand: string;
   model: string;
   serialNumber: string;
   macAddress?: string;
   imei?: string;
+  ipAddress?: string;
+  username?: string;
+  password?: string;
+  firmwareVersion?: string;
+  category?: EquipmentCategory;
   installationDate?: string;
   customerName?: string;
   location?: string;
@@ -23,10 +47,55 @@ export interface Equipment {
   photos: string[]; // Base64 image data strings
 }
 
-export interface Job {
+export interface OnsiteChecklist {
+  checkLan: boolean;
+  checkPoe: boolean;
+  checkPower: boolean;
+  checkInternet: boolean;
+  checkPing: boolean;
+  checkCamera: boolean;
+  checkHdd: boolean;
+  checkUps: boolean;
+  checkRouter: boolean;
+  checkSwitch: boolean;
+  resultNotes?: string;
+}
+
+export interface SystemTestResult {
+  pingIp?: string;
+  packetLoss?: string;
+  latency?: string;
+  bandwidthUpload?: string;
+  bandwidthDownload?: string;
+  resultNotes?: string;
+}
+
+export interface JobPhotos {
+  before: string[]; // Base64 image strings
+  during: string[]; // Base64 image strings
+  after: string[];  // Base64 image strings
+}
+
+export interface Customer {
   id: string;
+  name: string;
+  company?: string;
+  phone: string;
+  email?: string;
+  line?: string;
+  googleMap?: string;
+  latitude?: string;
+  longitude?: string;
+  address: string;
+  venuePhoto?: string; // Base64 image
+  notes?: string;
+}
+
+export interface Job {
+  id: string; // เลขที่งาน
+  customerId?: string; // Link to customer (optional for compatibility)
   customerName: string;
-  jobType: "Installation" | "Repair" | "Maintenance" | "Emergency";
+  jobType: "Installation" | "Repair" | "Maintenance" | "Relocation" | "Expansion" | "Emergency";
   phone: string;
   address: string;
   date: string; // YYYY-MM-DD
@@ -38,6 +107,11 @@ export interface Job {
   reminders: ("1day" | "3hours" | "1hour" | "30min")[];
   equipmentSerials: string[]; // Serial numbers connected to this job
   technicianName?: string;
+  checklist?: OnsiteChecklist;
+  systemTest?: SystemTestResult;
+  photos?: JobPhotos;
+  signature?: string; // Base64 signature image
+  revenue?: number; // Job revenue for reports
 }
 
 export interface SystemNotification {
@@ -57,3 +131,4 @@ export interface EquipmentHistoryItem {
   notes: string;
   photos: string[];
 }
+
