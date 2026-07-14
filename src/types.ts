@@ -106,11 +106,33 @@ export interface ServiceWarranty {
   claims: FreeServiceClaim[];
 }
 
+export interface SiteSurveyDetails {
+  surveyDate?: string;
+  surveyDistanceKm?: number;
+  cameraPointsEst?: number;
+  cableLengthEst?: number;
+  environmentNotes?: string;
+  powerPointsEst?: number;
+  surveyPhotos?: string[]; // Base64 images
+}
+
+export interface QuotationDetails {
+  quotationNumber?: string;
+  items?: { name: string; quantity: number; pricePerUnit: number; total: number }[];
+  totalPrice?: number;
+  grandTotal?: number;
+  vatEnabled?: boolean;
+  notes?: string;
+  status: "Draft" | "PendingApproval" | "Approved" | "Rejected";
+  sentDate?: string;
+  approvedDate?: string;
+}
+
 export interface Job {
   id: string; // เลขที่งาน
   customerId?: string; // Link to customer (optional for compatibility)
   customerName: string;
-  jobType: "Installation" | "Repair" | "Maintenance" | "Relocation" | "Expansion" | "Emergency";
+  jobType: "Installation" | "Repair" | "Maintenance" | "Relocation" | "Expansion" | "Emergency" | "SiteSurvey";
   phone: string;
   address: string;
   date: string; // YYYY-MM-DD
@@ -128,6 +150,8 @@ export interface Job {
   signature?: string; // Base64 signature image
   revenue?: number; // Job revenue for reports
   warranty?: ServiceWarranty;
+  surveyDetails?: SiteSurveyDetails;
+  quotationDetails?: QuotationDetails;
 }
 
 export interface SystemNotification {

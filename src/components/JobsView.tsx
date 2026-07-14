@@ -61,7 +61,20 @@ export default function JobsView({
   const [activeTabFilter, setActiveTabFilter] = useState<"All" | "Pending" | "In Progress" | "Completed" | "Canceled">("All");
 
   // Tabbed layout within Selected Job Drawer
-  const [detailsTab, setDetailsTab] = useState<"equipments" | "checklist" | "testing" | "photos" | "signature" | "warranty">("equipments");
+  const [detailsTab, setDetailsTab] = useState<"equipments" | "checklist" | "testing" | "photos" | "signature" | "warranty" | "survey">("equipments");
+
+  // Site Survey & Quotation states
+  const [surveyDate, setSurveyDate] = useState("");
+  const [surveyDistanceKm, setSurveyDistanceKm] = useState(0);
+  const [cameraPointsEst, setCameraPointsEst] = useState(0);
+  const [cableLengthEst, setCableLengthEst] = useState(0);
+  const [powerPointsEst, setPowerPointsEst] = useState(0);
+  const [environmentNotes, setEnvironmentNotes] = useState("");
+
+  const [quotationNumber, setQuotationNumber] = useState("");
+  const [quotationNotes, setQuotationNotes] = useState("");
+  const [vatEnabled, setVatEnabled] = useState(false);
+  const [quotationItems, setQuotationItems] = useState<{ name: string; quantity: number; pricePerUnit: number; total: number }[]>([]);
 
   // Warranty / Onsite Service states for Create Form
   const [enableWarranty, setEnableWarranty] = useState(true);
@@ -106,7 +119,7 @@ export default function JobsView({
 
   // Create Form State
   const [customerName, setCustomerName] = useState("");
-  const [jobType, setJobType] = useState<"Installation" | "Repair" | "Maintenance" | "Emergency">("Installation");
+  const [jobType, setJobType] = useState<Job["jobType"]>("SiteSurvey");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [date, setDate] = useState("");
@@ -162,8 +175,33 @@ export default function JobsView({
       setBwDownload(st?.bandwidthDownload || "");
       setTestNotes(st?.resultNotes || "");
 
-      // Set details default tab
-      setDetailsTab("equipments");
+      // Load site survey details
+      const sd = activeJob.surveyDetails;
+      setSurveyDate(sd?.surveyDate || activeJob.date || "");
+      setSurveyDistanceKm(sd?.surveyDistanceKm || 15);
+      setCameraPointsEst(sd?.cameraPointsEst || 4);
+      setCableLengthEst(sd?.cableLengthEst || 100);
+      setPowerPointsEst(sd?.powerPointsEst || 2);
+      setEnvironmentNotes(sd?.environmentNotes || "");
+
+      // Load quotation details
+      const qd = activeJob.quotationDetails;
+      setQuotationNumber(qd?.quotationNumber || `QT-${activeJob.id}`);
+      setQuotationNotes(qd?.notes || "ราคารวมบริการ onsite service ตรวจเช็คฟรี 3 ครั้ง ในรอบ 1 ปีหลังการติดตั้งเสร็จสิ้น");
+      setVatEnabled(qd?.vatEnabled || false);
+      setQuotationItems(qd?.items || [
+        { name: "กล้อง CCTV ความละเอียดสูง HD IP Camera", quantity: 4, pricePerUnit: 2500, total: 10000 },
+        { name: "สายสัญญาณสำเร็จรูปพร้อมหัวต่อ RJ45 Outdoor", quantity: 4, pricePerUnit: 350, total: 1400 },
+        { name: "เครื่องบันทึกภาพ NVR 8CH พร้อม Harddisk 2TB", quantity: 1, pricePerUnit: 6500, total: 6500 },
+        { name: "ค่าบริการติดตั้ง On-site Service ติดตั้ง+ประกัน 1 ปี", quantity: 1, pricePerUnit: 3500, total: 3500 },
+      ]);
+
+      // Set details default tab based on jobType
+      if (activeJob.jobType === "SiteSurvey") {
+        setDetailsTab("survey");
+      } else {
+        setDetailsTab("equipments");
+      }
 
       // Reset Claim fields
       setClaimDate(new Date().toISOString().split("T")[0]);
@@ -554,6 +592,118 @@ export default function JobsView({
     alert("เปิดใช้งานระบบรับประกันและสิทธิ์บริการฟรีสำเร็จ!");
   };
 
+  const addQuotationItem = () => {
+    setQuotationItems([
+      ...quotationItems,
+      { name: "รายการสินค้า / อุปกรณ์ หรือค่าบริการ", quantity: 1, pricePerUnit: 1000, total: 1000 }
+    ]);
+  };
+
+  const removeQuotationItem = (index: number) => {
+    setQuotationItems(quotationItems.filter((_, idx) => idx !== index));
+  };
+
+  const updateQuotationItem = (index: number, field: "name" | "quantity" | "pricePerUnit", value: any) => {
+    const updated = [...quotationItems];
+    if (field === "quantity" || field === "pricePerUnit") {
+      updated[index][field] = Number(value);
+      updated[index].total = updated[index].quantity * updated[index].pricePerUnit;
+    } else {
+      updated[index][field] = value;
+    }
+    setQuotationItems(updated);
+  };
+
+  const handleSaveSurveyAndQuotation = () => {
+    if (!activeJob) return;
+
+    const subTotal = quotationItems.reduce((acc, item) => acc + (item.quantity * item.pricePerUnit), 0);
+    const tax = vatEnabled ? subTotal * 0.07 : 0;
+    const grandTotal = subTotal + tax;
+
+    const updatedJob: Job = {
+      ...activeJob,
+      surveyDetails: {
+        surveyDate,
+        surveyDistanceKm: Number(surveyDistanceKm),
+        cameraPointsEst: Number(cameraPointsEst),
+        cableLengthEst: Number(cableLengthEst),
+        powerPointsEst: Number(powerPointsEst),
+        environmentNotes,
+        surveyPhotos: activeJob.surveyDetails?.surveyPhotos || [],
+      },
+      quotationDetails: {
+        quotationNumber,
+        items: quotationItems,
+        totalPrice: subTotal,
+        vatEnabled,
+        grandTotal,
+        notes: quotationNotes,
+        status: activeJob.quotationDetails?.status || "Draft",
+        sentDate: activeJob.quotationDetails?.sentDate || (activeJob.quotationDetails?.status === "PendingApproval" ? new Date().toISOString().split("T")[0] : undefined),
+        approvedDate: activeJob.quotationDetails?.approvedDate,
+      },
+    };
+
+    onUpdateJob(updatedJob);
+    alert("บันทึกข้อมูลผลการสำรวจและรายละเอียดใบเสนอราคาเรียบร้อยแล้ว!");
+  };
+
+  const handleUpdateQuotationStatus = (newStatus: "Draft" | "PendingApproval" | "Approved" | "Rejected") => {
+    if (!activeJob || !activeJob.quotationDetails) return;
+
+    const updatedJob: Job = {
+      ...activeJob,
+      quotationDetails: {
+        ...activeJob.quotationDetails,
+        status: newStatus,
+        sentDate: newStatus === "PendingApproval" ? new Date().toISOString().split("T")[0] : activeJob.quotationDetails.sentDate,
+        approvedDate: newStatus === "Approved" ? new Date().toISOString().split("T")[0] : activeJob.quotationDetails.approvedDate,
+      }
+    };
+
+    onUpdateJob(updatedJob);
+    alert(`อัปเดตสถานะใบเสนอราคาเป็น: ${
+      newStatus === "Draft" ? "ร่างใบเสนอราคา" :
+      newStatus === "PendingApproval" ? "ส่งใบเสนอราคาแล้ว/รอลูกค้าอนุมัติ" :
+      newStatus === "Approved" ? "ลูกค้าอนุมัติแล้ว" : "ปฏิเสธ/ไม่อนุมัติ"
+    } เรียบร้อยแล้ว`);
+  };
+
+  const handleConvertToInstallation = () => {
+    if (!activeJob) return;
+    const confirmed = window.confirm("คุณต้องการแปลงสถานะใบงานนี้เป็น 'งานติดตั้งจริง' พร้อมเริ่มนัดหมายและเปิดใช้งานระบบรับประกันสินค้า 1 ปี สิทธิ์ Onsite Service ฟรี 3 ครั้ง ใช่หรือไม่?");
+    if (!confirmed) return;
+
+    const calculateEndDate = (start: string, years: number): string => {
+      try {
+        const d = new Date(start);
+        d.setFullYear(d.getFullYear() + years);
+        return d.toISOString().split("T")[0];
+      } catch (err) {
+        return start;
+      }
+    };
+
+    const updatedJob: Job = {
+      ...activeJob,
+      jobType: "Installation",
+      status: "Pending",
+      notes: `[แปลงมาจากใบสำรวจหน้างาน] ${activeJob.notes || ""}\n\nบันทึกสภาพแวดล้อมสำรวจ: ${activeJob.surveyDetails?.environmentNotes || ""}\nใบเสนอราคาเลขที่: ${activeJob.quotationDetails?.quotationNumber || ""}`,
+      warranty: {
+        warrantyStartDate: new Date().toISOString().split("T")[0],
+        warrantyEndDate: calculateEndDate(new Date().toISOString().split("T")[0], 1),
+        totalFreeServices: 3,
+        usedFreeServices: 0,
+        claims: [],
+      },
+    };
+
+    onUpdateJob(updatedJob);
+    alert("🎉 ยินดีด้วย! แปลงสถานะใบงานเป็น 'งานติดตั้งจริง' พร้อมเปิดระบบประกันสินค้า 1 ปี + Onsite ฟรี 3 ครั้ง สำเร็จเรียบร้อยแล้ว!");
+    setDetailsTab("equipments");
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || !phone || !address || !date || !startTime || !endTime) {
@@ -580,6 +730,31 @@ export default function JobsView({
       claims: [],
     } : undefined;
 
+    const surveyDetails = jobType === "SiteSurvey" ? {
+      surveyDate: date,
+      surveyDistanceKm: 15,
+      cameraPointsEst: 4,
+      cableLengthEst: 120,
+      powerPointsEst: 2,
+      environmentNotes: notes || "ลูกค้าต้องการติดตั้งกล้องวงจรปิดรอบบริเวณบ้านเดี่ยว 2 ชั้น",
+      surveyPhotos: [],
+    } : undefined;
+
+    const quotationDetails = jobType === "SiteSurvey" ? {
+      quotationNumber: `QT-${Math.floor(100000 + Math.random() * 900000)}`,
+      items: [
+        { name: "กล้อง CCTV ความละเอียดสูง HD IP Camera", quantity: 4, pricePerUnit: 2500, total: 10000 },
+        { name: "สายสัญญาณสำเร็จรูปพร้อมหัวต่อ RJ45 Outdoor", quantity: 4, pricePerUnit: 350, total: 1400 },
+        { name: "เครื่องบันทึกภาพ NVR 8CH พร้อม Harddisk 2TB", quantity: 1, pricePerUnit: 6500, total: 6500 },
+        { name: "ค่าบริการติดตั้ง On-site Service ติดตั้ง+ประกัน 1 ปี", quantity: 1, pricePerUnit: 3500, total: 3500 },
+      ],
+      totalPrice: 21400,
+      grandTotal: 21400,
+      vatEnabled: false,
+      notes: "ราคารวมบริการ onsite service ตรวจเช็คฟรี 3 ครั้ง ในรอบ 1 ปีหลังการติดตั้งเสร็จสิ้น",
+      status: "Draft" as const,
+    } : undefined;
+
     const newJob: Job = {
       id: "JOB-" + Math.floor(1000 + Math.random() * 9000),
       customerName,
@@ -595,6 +770,8 @@ export default function JobsView({
       equipmentSerials: [],
       technicianName: currentUser?.displayName || "วิชัย ช่างเทคนิค",
       warranty,
+      surveyDetails,
+      quotationDetails,
     };
 
     onCreateJob(newJob);
@@ -655,6 +832,8 @@ export default function JobsView({
 
   const getJobTypeLabel = (type: Job["jobType"]) => {
     switch (type) {
+      case "SiteSurvey":
+        return "สำรวจหน้างานก่อนติดตั้ง";
       case "Installation":
         return "ติดตั้งอุปกรณ์";
       case "Repair":
@@ -663,6 +842,10 @@ export default function JobsView({
         return "บำรุงรักษา";
       case "Emergency":
         return "ด่วนที่สุด";
+      case "Relocation":
+        return "ย้ายจุดติดตั้ง";
+      case "Expansion":
+        return "ขยายระบบ";
     }
   };
 
@@ -976,36 +1159,313 @@ export default function JobsView({
               {/* Dynamic Tabs Navigation within selected job */}
               <div className="border-b border-slate-200 dark:border-slate-800 pt-2">
                 <div className="flex gap-1 overflow-x-auto pb-px">
-                  {(["equipments", "checklist", "testing", "photos", "signature", "warranty"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setDetailsTab(t)}
-                      className={`py-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
-                        detailsTab === t
-                          ? "border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 font-extrabold"
-                          : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
-                      }`}
-                    >
-                      {t === "equipments" && <Layers className="w-4 h-4" />}
-                      {t === "checklist" && <CheckSquare className="w-4 h-4" />}
-                      {t === "testing" && <Activity className="w-4 h-4" />}
-                      {t === "photos" && <ImageIcon className="w-4 h-4" />}
-                      {t === "signature" && <User className="w-4 h-4" />}
-                      {t === "warranty" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                      
-                      {t === "equipments" && "คลังอุปกรณ์คัดกรอง"}
-                      {t === "checklist" && "เช็คลิสต์ตรวจงาน"}
-                      {t === "testing" && "ทดสอบความเร็วเน็ต"}
-                      {t === "photos" && "รูปถ่ายก่อน-หลัง"}
-                      {t === "signature" && "ลายมือชื่อลูกค้า"}
-                      {t === "warranty" && "ประกัน & บริการฟรี"}
-                    </button>
-                  ))}
+                  {(["survey", "equipments", "checklist", "testing", "photos", "signature", "warranty"] as const).map((t) => {
+                    if (t === "survey" && activeJob.jobType !== "SiteSurvey" && !activeJob.surveyDetails) return null;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setDetailsTab(t)}
+                        className={`py-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                          detailsTab === t
+                            ? "border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 font-extrabold"
+                            : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                        }`}
+                      >
+                        {t === "survey" && <FileText className="w-4 h-4 text-amber-500" />}
+                        {t === "equipments" && <Layers className="w-4 h-4" />}
+                        {t === "checklist" && <CheckSquare className="w-4 h-4" />}
+                        {t === "testing" && <Activity className="w-4 h-4" />}
+                        {t === "photos" && <ImageIcon className="w-4 h-4" />}
+                        {t === "signature" && <User className="w-4 h-4" />}
+                        {t === "warranty" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                        
+                        {t === "survey" && "สำรวจ & ใบเสนอราคา"}
+                        {t === "equipments" && "คลังอุปกรณ์คัดกรอง"}
+                        {t === "checklist" && "เช็คลิสต์ตรวจงาน"}
+                        {t === "testing" && "ทดสอบความเร็วเน็ต"}
+                        {t === "photos" && "รูปถ่ายก่อน-หลัง"}
+                        {t === "signature" && "ลายมือชื่อลูกค้า"}
+                        {t === "warranty" && "ประกัน & บริการฟรี"}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Tab Layout Display Area */}
               <div className="pt-2 space-y-4">
+                {/* 0. Site Survey & Quotation Tab */}
+                {detailsTab === "survey" && (
+                  <div className="space-y-6">
+                    {/* Status Alert Banner */}
+                    <div className="p-4 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs bg-gradient-to-r from-amber-500/10 to-blue-500/10 border-amber-500/20 dark:border-amber-500/30">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping" />
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                            ขั้นตอน: สำรวจหน้างานและจัดทำใบเสนอราคาก่อนติดตั้ง
+                          </h4>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          ช่างเทคนิคลงสำรวจพื้นที่ ประเมินจุดติดตั้ง จากนั้นทำใบเสนอราคาเสนอเพื่อรอกระบวนการอนุมัติ
+                        </p>
+                      </div>
+
+                      {/* Status pill in banner */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">สถานะใบเสนอราคา:</span>
+                        <select
+                          value={activeJob.quotationDetails?.status || "Draft"}
+                          onChange={(e) => handleUpdateQuotationStatus(e.target.value as any)}
+                          className={`text-xs font-black px-3 py-1.5 rounded-xl border focus:outline-none cursor-pointer ${
+                            activeJob.quotationDetails?.status === "Approved"
+                              ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                              : activeJob.quotationDetails?.status === "PendingApproval"
+                              ? "bg-blue-500/20 border-blue-500/30 text-blue-700 dark:text-blue-400 animate-pulse"
+                              : activeJob.quotationDetails?.status === "Rejected"
+                              ? "bg-rose-500/20 border-rose-500/30 text-rose-700 dark:text-rose-400"
+                              : "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          <option value="Draft">Draft (ร่างใบเสนอราคา)</option>
+                          <option value="PendingApproval">Pending Approval (ส่งแล้ว/รออนุมัติ)</option>
+                          <option value="Approved">Approved (ลูกค้าอนุมัติแล้ว)</option>
+                          <option value="Rejected">Rejected (ไม่อนุมัติ/ยกเลิก)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Convert to Installation Block (Only if Approved and jobType is SiteSurvey) */}
+                    {activeJob.quotationDetails?.status === "Approved" && activeJob.jobType === "SiteSurvey" && (
+                      <div className="p-5 bg-gradient-to-br from-emerald-500/15 to-teal-500/15 dark:from-emerald-950/20 dark:to-teal-950/20 border border-emerald-500/30 dark:border-emerald-500/40 rounded-3xl space-y-3.5 shadow-xs">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">ลูกค้ากดอนุมัติ (Approved) การติดตั้งเรียบร้อยแล้ว!</h4>
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 leading-relaxed font-medium mt-1">
+                              เอกสารและราคาได้รับการยืนยันแล้ว สามารถเปลี่ยนประเภทใบงานเป็น "งานติดตั้งจริง" เพื่อเริ่มกระบวนการสแกนอุปกรณ์, เข้าดำเนินการเชื่อมสัญญาณ และระบบจะเปิดประกัน 1 ปี Onsite ฟรี 3 ครั้งให้ทันที
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleConvertToInstallation}
+                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <Check className="w-4 h-4" /> แปลงเป็นใบงานเข้าติดตั้งและเปิดสิทธิ์รับประกันภัย (1 ปี + Onsite ฟรี 3 ครั้ง)
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                      {/* Left: Site Survey Info */}
+                      <div className="bg-slate-50/80 dark:bg-slate-900/40 p-5 rounded-3xl border border-slate-200/60 dark:border-slate-800 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                          <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <MapPin className="w-4.5 h-4.5 text-amber-500" />
+                            ข้อมูลรายงานสำรวจหน้างาน (Onsite Survey Details)
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">วันที่ลงสำรวจหน้างาน *</label>
+                            <input
+                              type="date"
+                              value={surveyDate}
+                              onChange={(e) => setSurveyDate(e.target.value)}
+                              className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">ระยะทางจากศูนย์ (ไป-กลับ กม.)</label>
+                            <input
+                              type="number"
+                              value={surveyDistanceKm}
+                              onChange={(e) => setSurveyDistanceKm(Number(e.target.value))}
+                              className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">ประมาณการจุดติดตั้งกล้อง</label>
+                            <input
+                              type="number"
+                              value={cameraPointsEst}
+                              onChange={(e) => setCameraPointsEst(Number(e.target.value))}
+                              className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">ความยาวสายสัญญาณที่ใช้ (เมตร)</label>
+                            <input
+                              type="number"
+                              value={cableLengthEst}
+                              onChange={(e) => setCableLengthEst(Number(e.target.value))}
+                              className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1 col-span-2">
+                            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">จำนวนจุดจ่ายไฟ AC/PoE ที่ต้องเพิ่ม</label>
+                            <input
+                              type="number"
+                              value={powerPointsEst}
+                              onChange={(e) => setPowerPointsEst(Number(e.target.value))}
+                              className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">บันทึกรายละเอียด / อุปสรรคทางกายภาพหน้างาน</label>
+                          <textarea
+                            value={environmentNotes}
+                            onChange={(e) => setEnvironmentNotes(e.target.value)}
+                            placeholder="เช่น โครงสร้างผนังเป็นคอนกรีตเสริมเหล็กหนา, ต้องขุดเจาะท่อร้อยสายรอดใต้โรงจอดรถยาว 15 เมตร, คาดว่าจะต้องใช้บันไดยาว 6 เมตร..."
+                            rows={3}
+                            className="w-full p-3 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none leading-relaxed"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Right: Quotation & Pricing Info */}
+                      <div className="bg-slate-50/80 dark:bg-slate-900/40 p-5 rounded-3xl border border-slate-200/60 dark:border-slate-800 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                          <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <FileText className="w-4.5 h-4.5 text-blue-500" />
+                            รายการประมาณการราคา (Quotation Details)
+                          </h4>
+                          <span className="text-[10px] bg-slate-200 dark:bg-slate-800 font-bold px-2 py-0.5 rounded text-slate-600 dark:text-slate-300 font-mono">
+                            Auto Calc
+                          </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">เลขที่เอกสารใบเสนอราคา (Quotation Number)</label>
+                          <input
+                            type="text"
+                            value={quotationNumber}
+                            onChange={(e) => setQuotationNumber(e.target.value)}
+                            placeholder="QT-XXXXXX"
+                            className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Quotation Itemized pricing */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">รายการอุปกรณ์และงานโครงสร้าง ({quotationItems.length})</span>
+                            <button
+                              type="button"
+                              onClick={addQuotationItem}
+                              className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 px-2 py-1 rounded-lg transition cursor-pointer"
+                            >
+                              + เพิ่มแถวสินค้า
+                            </button>
+                          </div>
+
+                          <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                            {quotationItems.map((item, idx) => (
+                              <div key={idx} className="flex gap-1.5 items-center bg-white dark:bg-slate-950 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                                <input
+                                  type="text"
+                                  value={item.name}
+                                  onChange={(e) => updateQuotationItem(idx, "name", e.target.value)}
+                                  placeholder="ชื่ออุปกรณ์/รายการบริการ"
+                                  className="text-xs p-1.5 border-none focus:outline-none focus:ring-0 bg-transparent flex-1 font-semibold text-slate-700 dark:text-slate-200 min-w-0"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => updateQuotationItem(idx, "quantity", e.target.value)}
+                                  placeholder="จำนวน"
+                                  className="text-xs p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg w-12 text-center bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-mono"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.pricePerUnit}
+                                  onChange={(e) => updateQuotationItem(idx, "pricePerUnit", e.target.value)}
+                                  placeholder="ราคา/หน่วย"
+                                  className="text-xs p-1.5 border border-slate-200 dark:border-slate-800 rounded-lg w-16 text-center bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-mono"
+                                />
+                                <span className="text-xs font-bold font-mono text-slate-500 dark:text-slate-400 w-16 text-right shrink-0">
+                                  {(item.quantity * item.pricePerUnit).toLocaleString()} ฿
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeQuotationItem(idx)}
+                                  className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded transition shrink-0 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Calculation Area */}
+                        <div className="bg-white dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1.5 text-xs">
+                          <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                            <span>ราคาสินค้ารวม (Subtotal):</span>
+                            <span className="font-bold font-mono text-slate-850 dark:text-slate-200">
+                              {quotationItems.reduce((acc, item) => acc + (item.quantity * item.pricePerUnit), 0).toLocaleString()} ฿
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={vatEnabled}
+                                onChange={(e) => setVatEnabled(e.target.checked)}
+                                className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                              />
+                              <span>คิดภาษีมูลค่าเพิ่ม (VAT 7%):</span>
+                            </label>
+                            <span className="font-bold font-mono text-slate-650 dark:text-slate-300">
+                              {vatEnabled
+                                ? (quotationItems.reduce((acc, item) => acc + (item.quantity * item.pricePerUnit), 0) * 0.07).toLocaleString()
+                                : "0"}{" "}
+                              ฿
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-slate-850 dark:text-slate-200 font-black text-sm">
+                            <span className="text-blue-700 dark:text-blue-400">ยอดรวมทั้งสิ้น (Grand Total):</span>
+                            <span className="font-mono text-blue-700 dark:text-blue-400">
+                              {(
+                                quotationItems.reduce((acc, item) => acc + (item.quantity * item.pricePerUnit), 0) *
+                                (vatEnabled ? 1.07 : 1)
+                              ).toLocaleString()}{" "}
+                              ฿
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">หมายเหตุใบเสนอราคา / เงื่อนไขการชำระเงิน</label>
+                          <textarea
+                            value={quotationNotes}
+                            onChange={(e) => setQuotationNotes(e.target.value)}
+                            placeholder="เช่น ยืนราคาในระยะเวลา 30 วัน, แบ่งชำระเป็น 2 งวด (งวดที่ 1 50% ก่อนเข้าหน้างาน, งวดที่ 2 50% หลังส่งมอบงาน)"
+                            rows={2}
+                            className="w-full p-2.5 text-xs rounded-xl border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveSurveyAndQuotation}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" /> บันทึกข้อมูลรายงานสำรวจหน้างานและใบเสนอราคา
+                    </button>
+                  </div>
+                )}
                 {/* 1. Equipments & Scanner Tab */}
                 {detailsTab === "equipments" && (
                   <div className="space-y-4">
@@ -2029,12 +2489,15 @@ export default function JobsView({
                   <select
                     value={jobType}
                     onChange={(e) => setJobType(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
-                    <option value="Installation">Installation (ติดตั้ง)</option>
-                    <option value="Repair">Repair (งานซ่อม)</option>
+                    <option value="SiteSurvey">Site Survey (สำรวจหน้างานก่อนติดตั้ง)</option>
+                    <option value="Installation">Installation (ติดตั้งอุปกรณ์)</option>
+                    <option value="Repair">Repair (งานซ่อมแซม)</option>
                     <option value="Maintenance">Maintenance (บำรุงรักษา)</option>
                     <option value="Emergency">Emergency (ฉุกเฉินด่วน)</option>
+                    <option value="Relocation">Relocation (ย้ายจุดติดตั้ง)</option>
+                    <option value="Expansion">Expansion (ขยายระบบ)</option>
                   </select>
                 </div>
 
