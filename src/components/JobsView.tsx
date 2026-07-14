@@ -61,7 +61,18 @@ export default function JobsView({
   const [activeTabFilter, setActiveTabFilter] = useState<"All" | "Pending" | "In Progress" | "Completed" | "Canceled">("All");
 
   // Tabbed layout within Selected Job Drawer
-  const [detailsTab, setDetailsTab] = useState<"equipments" | "checklist" | "testing" | "photos" | "signature">("equipments");
+  const [detailsTab, setDetailsTab] = useState<"equipments" | "checklist" | "testing" | "photos" | "signature" | "warranty">("equipments");
+
+  // Warranty / Onsite Service states for Create Form
+  const [enableWarranty, setEnableWarranty] = useState(true);
+  const [warrantyTermYears, setWarrantyTermYears] = useState(1);
+  const [freeServiceCount, setFreeServiceCount] = useState(3);
+
+  // Claim Form state variables
+  const [claimDate, setClaimDate] = useState("");
+  const [claimTechnician, setClaimTechnician] = useState("");
+  const [claimNotes, setClaimNotes] = useState("");
+  const [showClaimForm, setShowClaimForm] = useState(false);
 
   // Checklist state variables (synchronized dynamically on selectedJobId change)
   const [checklistLan, setChecklistLan] = useState(false);
@@ -110,6 +121,11 @@ export default function JobsView({
   // Sync Google Calendar process states
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
+  // Sync enableWarranty with jobType change in Creation Form
+  React.useEffect(() => {
+    setEnableWarranty(jobType === "Installation");
+  }, [jobType]);
+
   // If a job was selected from another view (e.g. Dashboard)
   React.useEffect(() => {
     if (selectedJobExternal) {
@@ -148,6 +164,12 @@ export default function JobsView({
 
       // Set details default tab
       setDetailsTab("equipments");
+
+      // Reset Claim fields
+      setClaimDate(new Date().toISOString().split("T")[0]);
+      setClaimTechnician(currentUser?.displayName || "วิชัย ช่างเทคนิค");
+      setClaimNotes("");
+      setShowClaimForm(false);
     }
   }, [selectedJobId]);
 
@@ -452,12 +474,111 @@ export default function JobsView({
     onUpdateJob(updatedJob);
   };
 
+  const handleAddClaim = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeJob || !activeJob.warranty) return;
+    if (!claimDate || !claimTechnician || !claimNotes) {
+      alert("กรุณากรอกข้อมูลการเคลมบริการให้ครบถ้วน");
+      return;
+    }
+
+    const newClaim = {
+      id: "claim-" + Date.now(),
+      date: claimDate,
+      notes: claimNotes,
+      technicianName: claimTechnician,
+    };
+
+    const updatedWarranty = {
+      ...activeJob.warranty,
+      usedFreeServices: activeJob.warranty.usedFreeServices + 1,
+      claims: [...activeJob.warranty.claims, newClaim],
+    };
+
+    const updatedJob: Job = {
+      ...activeJob,
+      warranty: updatedWarranty,
+    };
+
+    onUpdateJob(updatedJob);
+    alert("บันทึกการเคลมบริการฟรีสำเร็จเรียบร้อย!");
+    setClaimNotes("");
+    setShowClaimForm(false);
+  };
+
+  const handleDeleteClaim = (claimId: string) => {
+    if (!activeJob || !activeJob.warranty) return;
+    const confirmed = window.confirm("คุณต้องการลบประวัติการเคลมบริการนี้และคืนสิทธิ์คงเหลือ ใช่หรือไม่?");
+    if (!confirmed) return;
+
+    const filteredClaims = activeJob.warranty.claims.filter((c) => c.id !== claimId);
+    const updatedWarranty = {
+      ...activeJob.warranty,
+      usedFreeServices: Math.max(0, activeJob.warranty.usedFreeServices - 1),
+      claims: filteredClaims,
+    };
+
+    const updatedJob: Job = {
+      ...activeJob,
+      warranty: updatedWarranty,
+    };
+
+    onUpdateJob(updatedJob);
+    alert("ลบประวัติการเคลมและคืนสิทธิ์เรียบร้อย");
+  };
+
+  const handleEnableWarrantyRetroactive = () => {
+    if (!activeJob) return;
+    const calculateEndDate = (start: string, years: number): string => {
+      try {
+        const d = new Date(start);
+        d.setFullYear(d.getFullYear() + years);
+        return d.toISOString().split("T")[0];
+      } catch (err) {
+        return start;
+      }
+    };
+
+    const updatedJob: Job = {
+      ...activeJob,
+      warranty: {
+        warrantyStartDate: activeJob.date,
+        warrantyEndDate: calculateEndDate(activeJob.date, 1),
+        totalFreeServices: 3,
+        usedFreeServices: 0,
+        claims: [],
+      },
+    };
+
+    onUpdateJob(updatedJob);
+    alert("เปิดใช้งานระบบรับประกันและสิทธิ์บริการฟรีสำเร็จ!");
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || !phone || !address || !date || !startTime || !endTime) {
       alert("กรุณากรอกข้อมูลให้ครบทุกช่อง");
       return;
     }
+
+    const calculateEndDate = (start: string, years: number): string => {
+      if (!start) return "";
+      try {
+        const d = new Date(start);
+        d.setFullYear(d.getFullYear() + years);
+        return d.toISOString().split("T")[0];
+      } catch (err) {
+        return start;
+      }
+    };
+
+    const warranty = enableWarranty ? {
+      warrantyStartDate: date,
+      warrantyEndDate: calculateEndDate(date, warrantyTermYears),
+      totalFreeServices: freeServiceCount,
+      usedFreeServices: 0,
+      claims: [],
+    } : undefined;
 
     const newJob: Job = {
       id: "JOB-" + Math.floor(1000 + Math.random() * 9000),
@@ -473,6 +594,7 @@ export default function JobsView({
       reminders,
       equipmentSerials: [],
       technicianName: currentUser?.displayName || "วิชัย ช่างเทคนิค",
+      warranty,
     };
 
     onCreateJob(newJob);
@@ -485,6 +607,9 @@ export default function JobsView({
     setStartTime("");
     setEndTime("");
     setNotes("");
+    setEnableWarranty(true);
+    setWarrantyTermYears(1);
+    setFreeServiceCount(3);
     setShowCreateForm(false);
   };
 
@@ -849,16 +974,16 @@ export default function JobsView({
               </div>
 
               {/* Dynamic Tabs Navigation within selected job */}
-              <div className="border-b border-slate-200 pt-2">
+              <div className="border-b border-slate-200 dark:border-slate-800 pt-2">
                 <div className="flex gap-1 overflow-x-auto pb-px">
-                  {(["equipments", "checklist", "testing", "photos", "signature"] as const).map((t) => (
+                  {(["equipments", "checklist", "testing", "photos", "signature", "warranty"] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() => setDetailsTab(t)}
                       className={`py-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                         detailsTab === t
-                          ? "border-blue-600 text-blue-600 font-extrabold"
-                          : "border-transparent text-slate-400 hover:text-slate-600"
+                          ? "border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 font-extrabold"
+                          : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
                       }`}
                     >
                       {t === "equipments" && <Layers className="w-4 h-4" />}
@@ -866,12 +991,14 @@ export default function JobsView({
                       {t === "testing" && <Activity className="w-4 h-4" />}
                       {t === "photos" && <ImageIcon className="w-4 h-4" />}
                       {t === "signature" && <User className="w-4 h-4" />}
+                      {t === "warranty" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
                       
                       {t === "equipments" && "คลังอุปกรณ์คัดกรอง"}
                       {t === "checklist" && "เช็คลิสต์ตรวจงาน"}
                       {t === "testing" && "ทดสอบความเร็วเน็ต"}
                       {t === "photos" && "รูปถ่ายก่อน-หลัง"}
                       {t === "signature" && "ลายมือชื่อลูกค้า"}
+                      {t === "warranty" && "ประกัน & บริการฟรี"}
                     </button>
                   ))}
                 </div>
@@ -1303,6 +1430,220 @@ export default function JobsView({
                     </div>
                   </div>
                 )}
+
+                {/* 6. Warranty & Free Service Tab */}
+                {detailsTab === "warranty" && (
+                  <div className="space-y-4">
+                    {!activeJob.warranty ? (
+                      <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center space-y-4">
+                        <div className="mx-auto w-12 h-12 bg-blue-50 dark:bg-blue-950/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
+                          <CheckCircle className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">ใบงานนี้ยังไม่ได้เปิดใช้งานการรับประกันสินค้า & บริการฟรี</h4>
+                          <p className="text-xs text-slate-400 dark:text-slate-400 max-w-sm mx-auto">
+                            ระบบประกันภัยจะช่วยคำนวณการรับประกันเป็นเวลา 1 ปี นับจากวันที่ติดตั้ง พร้อมให้สิทธิ์บริการ Onsite Service เข้าแก้ปัญหาระบบฟรี 3 ครั้ง
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleEnableWarrantyRetroactive}
+                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          เปิดใช้งานระบบรับประกัน 1 ปี + บริการฟรี 3 ครั้ง
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Warranty Status Summary */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 dark:from-emerald-950/20 dark:to-teal-950/20 p-4 rounded-2xl border border-emerald-500/20 dark:border-emerald-500/30 flex flex-col justify-between space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded">Active Warranty</span>
+                                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">การรับประกันสินค้าและบริการ</h4>
+                              </div>
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                                new Date().toISOString().split("T")[0] <= activeJob.warranty.warrantyEndDate
+                                  ? "bg-emerald-500/25 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                                  : "bg-rose-500/25 border-rose-500/30 text-rose-800 dark:text-rose-300"
+                              }`}>
+                                {new Date().toISOString().split("T")[0] <= activeJob.warranty.warrantyEndDate ? "กำลังคุ้มครอง" : "หมดอายุประกัน"}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-xs border-t border-emerald-500/10 dark:border-emerald-500/20 pt-2.5">
+                              <div>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">วันที่เริ่มรับประกัน</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{activeJob.warranty.warrantyStartDate}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">วันที่สิ้นสุดประกัน</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{activeJob.warranty.warrantyEndDate}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Free Service Tracker Card */}
+                          <div className="bg-slate-50 dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">Service Quota</span>
+                                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">สิทธิ์บริการ Onsite Service ฟรี</h4>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-lg font-black text-slate-800 dark:text-slate-100">
+                                  {activeJob.warranty.totalFreeServices - activeJob.warranty.usedFreeServices}
+                                </span>
+                                <span className="text-xs text-slate-400"> / {activeJob.warranty.totalFreeServices} ครั้ง</span>
+                              </div>
+                            </div>
+
+                            {/* Meter Bar */}
+                            <div className="space-y-1.5">
+                              <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
+                                  style={{
+                                    width: `${((activeJob.warranty.totalFreeServices - activeJob.warranty.usedFreeServices) / activeJob.warranty.totalFreeServices) * 100}%`,
+                                  }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-slate-400 flex justify-between">
+                                <span>ใช้ไปแล้ว {activeJob.warranty.usedFreeServices} ครั้ง</span>
+                                <span>คงเหลือ {activeJob.warranty.totalFreeServices - activeJob.warranty.usedFreeServices} ครั้ง</span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Button/Form to Claim Service */}
+                        {activeJob.warranty.usedFreeServices < activeJob.warranty.totalFreeServices ? (
+                          <div className="space-y-3">
+                            {!showClaimForm ? (
+                              <button
+                                onClick={() => {
+                                  setClaimDate(new Date().toISOString().split("T")[0]);
+                                  setClaimTechnician(currentUser?.displayName || "วิชัย ช่างเทคนิค");
+                                  setShowClaimForm(true);
+                                }}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-sm animate-pulse"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                บันทึกการเข้าเคลม Onsite Service ฟรี (หักสิทธิ์ 1 ครั้ง)
+                              </button>
+                            ) : (
+                              <form onSubmit={handleAddClaim} className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-3.5">
+                                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                  <h5 className="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                                    <CheckCircle className="w-4 h-4" />
+                                    กรอกข้อมูลประวัติการเคลมบริการ
+                                  </h5>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowClaimForm(false)}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                                  >
+                                    ยกเลิก
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">วันที่บริการ *</label>
+                                    <input
+                                      type="date"
+                                      required
+                                      value={claimDate}
+                                      onChange={(e) => setClaimDate(e.target.value)}
+                                      className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">ช่างเทคนิคผู้เข้าบริการ *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={claimTechnician}
+                                      onChange={(e) => setClaimTechnician(e.target.value)}
+                                      className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">รายละเอียดปัญหาและการแก้ไขแก้ไข *</label>
+                                  <textarea
+                                    required
+                                    rows={2}
+                                    placeholder="แจ้งปัญหาที่พบ และวิธีแก้ไขเพื่อจัดเก็บในประวัติ..."
+                                    value={claimNotes}
+                                    onChange={(e) => setClaimNotes(e.target.value)}
+                                    className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none resize-none"
+                                  />
+                                </div>
+
+                                <button
+                                  type="submit"
+                                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition"
+                                >
+                                  บันทึกการส่งเคลมบริการฟรี
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="bg-rose-50 dark:bg-rose-950/20 p-4 rounded-xl border border-rose-200 dark:border-rose-900/50 text-center text-rose-700 dark:text-rose-400 text-xs font-bold">
+                            ⚠️ สิทธิ์บริการฟรีหมดอายุการเคลมเรียบร้อยแล้ว
+                          </div>
+                        )}
+
+                        {/* Claims History logs */}
+                        <div className="space-y-2">
+                          <h4 className="font-bold text-xs text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-1">
+                            ประวัติการเข้าดูแลและบริการ ({activeJob.warranty.claims.length})
+                          </h4>
+
+                          {activeJob.warranty.claims.length === 0 ? (
+                            <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4 bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                              ยังไม่มีประวัติการแจ้งเคลมสิทธิ์บริการฟรี
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {activeJob.warranty.claims.map((claim) => (
+                                <div key={claim.id} className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-850 flex items-start justify-between gap-3 shadow-xs">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                        {claim.date}
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                                        ช่าง: {claim.technicianName}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                                      {claim.notes}
+                                    </p>
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleDeleteClaim(claim.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition cursor-pointer"
+                                    title="ลบประวัตินี้และคืนสิทธิ์"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1561,6 +1902,40 @@ export default function JobsView({
                 {activeJob.checklist?.resultNotes || "สภาพหน้างานปกติดี ระบบเครือข่ายเสถียร สแกนทดสอบการใช้งานกล้องเชื่อมต่อครบถ้วน อุปกรณ์มีสติ๊กเกอร์แปะรับประกัน S/N ครบทุกจุด"}
               </div>
 
+              {/* Warranty and Service claims report section */}
+              {activeJob.warranty && (
+                <div className="border border-emerald-500/25 bg-emerald-50/20 rounded-xl p-3 space-y-1.5 text-[10px]">
+                  <div className="flex items-center justify-between border-b border-emerald-500/20 pb-1">
+                    <span className="font-extrabold text-emerald-800">
+                      🛡️ รายงานการรับประกันสินค้าและสิทธิ์บริการ (Kingcom Service Guarantee)
+                    </span>
+                    <span className="font-mono text-emerald-700 font-black">
+                      สถานะ: {new Date().toISOString().split("T")[0] <= activeJob.warranty.warrantyEndDate ? "กำลังคุ้มครอง (Active)" : "หมดอายุรับประกัน (Expired)"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-slate-700">
+                    <div>
+                      <p className="mt-0.5"><strong>ระยะเวลารับประกันสินค้า:</strong> {activeJob.warranty.warrantyStartDate} ถึง {activeJob.warranty.warrantyEndDate} (รับประกันภัย 1 ปี)</p>
+                      <p className="mt-0.5"><strong>โควต้าเข้าดูแล Onsite ฟรี:</strong> ได้รับสิทธิ์ {activeJob.warranty.totalFreeServices} ครั้ง | ใช้ไป {activeJob.warranty.usedFreeServices} ครั้ง | คงเหลือ {activeJob.warranty.totalFreeServices - activeJob.warranty.usedFreeServices} ครั้ง</p>
+                    </div>
+                    <div>
+                      <p className="font-bold">บันทึกประวัติการเคลมดูแลระบบฟรี (Service Claim History):</p>
+                      {activeJob.warranty.claims.length === 0 ? (
+                        <p className="text-slate-400 italic">ยังไม่เคยใช้สิทธิ์เคลมเข้าบริการ</p>
+                      ) : (
+                        <ul className="list-disc list-inside space-y-0.5 text-[9px] text-slate-600">
+                          {activeJob.warranty.claims.map((claim, idx) => (
+                            <li key={idx}>
+                              วันที่ {claim.date} - ช่าง: {claim.technicianName} ({claim.notes})
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Photos Progress display block */}
               {((activeJob.photos?.before?.length || 0) > 0 || (activeJob.photos?.after?.length || 0) > 0) && (
                 <div className="py-4 space-y-2">
@@ -1753,6 +2128,57 @@ export default function JobsView({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Warranty & Free Service Setup Section */}
+              <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="enableWarranty"
+                      checked={enableWarranty}
+                      onChange={(e) => setEnableWarranty(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                    />
+                    <label htmlFor="enableWarranty" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      🛡️ สิทธิ์ประกันภัยและบริการฟรี (Onsite Service)
+                    </label>
+                  </div>
+                  <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 px-2 py-0.5 rounded-md uppercase">
+                    PROMO 1 ปี
+                  </span>
+                </div>
+
+                {enableWarranty && (
+                  <div className="grid grid-cols-2 gap-3 pl-6 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">ระยะเวลารับประกันสินค้า</label>
+                      <select
+                        value={warrantyTermYears}
+                        onChange={(e) => setWarrantyTermYears(Number(e.target.value))}
+                        className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none"
+                      >
+                        <option value={1}>1 ปี (มาตรฐาน)</option>
+                        <option value={2}>2 ปี (พรีเมียม)</option>
+                        <option value={3}>3 ปี (องค์กร)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">สิทธิ์บริการ Onsite ฟรี</label>
+                      <select
+                        value={freeServiceCount}
+                        onChange={(e) => setFreeServiceCount(Number(e.target.value))}
+                        className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none"
+                      >
+                        <option value={3}>3 ครั้ง (มาตรฐาน)</option>
+                        <option value={5}>5 ครั้ง (จุใจ)</option>
+                        <option value={10}>10 ครั้ง (สัญญาบริการ)</option>
+                        <option value={0}>ไม่มีบริการฟรี</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

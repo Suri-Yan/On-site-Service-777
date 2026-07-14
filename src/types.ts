@@ -91,6 +91,21 @@ export interface Customer {
   notes?: string;
 }
 
+export interface FreeServiceClaim {
+  id: string;
+  date: string;
+  notes: string;
+  technicianName: string;
+}
+
+export interface ServiceWarranty {
+  warrantyStartDate: string; // YYYY-MM-DD
+  warrantyEndDate: string; // YYYY-MM-DD
+  totalFreeServices: number; // Defaults to 3
+  usedFreeServices: number; // 0 to 3
+  claims: FreeServiceClaim[];
+}
+
 export interface Job {
   id: string; // เลขที่งาน
   customerId?: string; // Link to customer (optional for compatibility)
@@ -112,6 +127,7 @@ export interface Job {
   photos?: JobPhotos;
   signature?: string; // Base64 signature image
   revenue?: number; // Job revenue for reports
+  warranty?: ServiceWarranty;
 }
 
 export interface SystemNotification {
