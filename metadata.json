@@ -1,0 +1,6 @@
+{
+  "name": "Equipment Scanner and Job Manager",
+  "description": "ระบบจัดการใบงานติดตั้งและบำรุงรักษาอุปกรณ์ พร้อมเครื่องมือสแกน QR/Barcode และเชื่อมต่อ Google Calendar",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
