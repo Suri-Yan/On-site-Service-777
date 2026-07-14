@@ -135,7 +135,7 @@ export default function DashboardView({
             ระบบบริหารตารางนัดหมาย สแกนอุปกรณ์และเช็คลิสต์ช่างเทคนิค
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-3 text-slate-100">
-            แผงควบคุมระบบคิงคอม (Kingcom Core DB)
+            แผงควบคุมระบบคิงคอมพ์
           </h1>
           <p className="text-slate-400 text-sm mt-2 leading-relaxed">
             ระบบประสานงานช่างภาคสนาม ติดตามงาน CCTV, LAN, WiFi, Fiber Optic, Access Control, Time Attendance, โซล่าเซลล์ และรายงานสรุป PM ประจำวัน
