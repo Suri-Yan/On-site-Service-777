@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   FileText,
   Volume2,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { Job, Equipment, SystemNotification, UserRole, Customer } from "./types";
 import {
@@ -29,6 +31,20 @@ import BackupHub from "./components/BackupHub";
 import KingcomLogo from "./components/KingcomLogo";
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem("theme") === "dark";
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDarkMode]);
+
   const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "equipments" | "customers" | "analytics" | "security">("dashboard");
 
   // Core DB States
@@ -407,66 +423,75 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+    <div className={`min-h-screen transition-colors duration-200 flex flex-col font-sans ${isDarkMode ? "dark bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       {/* Top Navbar / Professional Polish Corporate Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-3.5 shrink-0 shadow-xs">
+      <header className="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3.5 shrink-0 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <KingcomLogo />
-            <div className="hidden sm:block w-px h-8 bg-slate-200"></div>
-            <p className="hidden sm:block text-[11px] text-slate-500 font-semibold max-w-[220px] leading-tight">
+            <div className="hidden sm:block w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
+            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 font-semibold max-w-[220px] leading-tight">
               ระบบจัดการคลังฮาร์ดแวร์และประวัติใบงานติดตั้งอัจฉริยะ
             </p>
           </div>
 
           {/* FCM Simulated Alerts triggers */}
-          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-            <span className="text-[9px] font-bold text-slate-500 uppercase px-2 flex items-center gap-1">
-              <Volume2 className="w-3 h-3 text-blue-600" /> FCM Sim:
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+            <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase px-2 flex items-center gap-1">
+              <Volume2 className="w-3 h-3 text-blue-600 dark:text-blue-400" /> FCM Sim:
             </span>
             <button
               onClick={() => handleSimulateFCMNotification("urgent")}
-              className="text-[10px] font-bold bg-white text-rose-600 border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-rose-50 transition cursor-pointer shadow-xs"
+              className="text-[10px] font-bold bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer shadow-xs"
             >
               ใบงานด่วนเข้า
             </button>
             <button
               onClick={() => handleSimulateFCMNotification("reschedule")}
-              className="text-[10px] font-bold bg-white text-blue-600 border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition cursor-pointer shadow-xs"
+              className="text-[10px] font-bold bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 transition cursor-pointer shadow-xs"
             >
               ลูกค้าเลื่อนนัด
             </button>
             <button
               onClick={() => handleSimulateFCMNotification("duplicate")}
-              className="text-[10px] font-bold bg-white text-amber-600 border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-amber-50 transition cursor-pointer shadow-xs"
+              className="text-[10px] font-bold bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition cursor-pointer shadow-xs"
             >
               สแกนรหัสซ้ำ
             </button>
           </div>
 
-          {/* Login Profile and GCal Sync Status Button */}
+          {/* Login Profile, Theme Toggle and GCal Sync Status Button */}
           <div className="flex items-center gap-3">
+            {/* Theme Selector Toggle Button */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs cursor-pointer flex items-center justify-center"
+              title={isDarkMode ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด"}
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+            </button>
+
             {currentUser ? (
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-medium">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/50 rounded-full text-xs font-medium">
                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                   Google Calendar Synced
                 </div>
-                <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
+                <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
                 <div className="flex items-center gap-2.5">
                   <img
                     src={currentUser.photoURL || ""}
                     alt="User avatar"
-                    className="w-9 h-9 bg-slate-200 rounded-full border border-slate-300"
+                    className="w-9 h-9 bg-slate-200 rounded-full border border-slate-300 dark:border-slate-700"
                     referrerPolicy="no-referrer"
                   />
                   <div className="hidden sm:block text-left">
                     <div className="text-xs font-semibold leading-none">{currentUser.displayName}</div>
-                    <span className="text-[10px] text-slate-500 mt-1 block">Lead Technician</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Lead Technician</span>
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-lg transition cursor-pointer"
+                    className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-500 rounded-lg transition cursor-pointer"
                     title="Logout"
                   >
                     <LogOut className="w-4 h-4" />
@@ -486,7 +511,7 @@ export default function App() {
       </header>
 
       {/* Primary Sub Navigation Tabs */}
-      <nav className="bg-white border-b border-slate-200">
+      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto">
           {(["dashboard", "jobs", "equipments", "customers", "analytics", "security"] as const).map((tab) => (
             <button
@@ -494,8 +519,8 @@ export default function App() {
               onClick={() => setActiveTab(tab)}
               className={`py-4 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
                 activeTab === tab
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-400 hover:text-slate-700"
+                  ? "border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400"
+                  : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               }`}
             >
               {tab === "dashboard" && (
@@ -606,7 +631,7 @@ export default function App() {
       </main>
 
       {/* Visual footer signature - Professional Polish Style */}
-      <footer className="h-12 bg-slate-800 text-slate-400 px-6 flex flex-col sm:flex-row items-center justify-between text-[10px] shrink-0 border-t border-slate-700 font-sans">
+      <footer className="h-12 bg-slate-800 dark:bg-slate-900 text-slate-400 dark:text-slate-500 px-6 flex flex-col sm:flex-row items-center justify-between text-[10px] shrink-0 border-t border-slate-700 dark:border-slate-800 font-sans">
         <div className="flex gap-4">
           <span>v4.2.0-PRO</span>
           <span>Enterprise Security: AES-256 Enabled</span>

@@ -1617,18 +1617,6 @@ export default function JobsView({
           </div>
         </div>
       )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-200 text-center p-6">
-              <FileText className="w-12 h-12 text-slate-300 mb-3" />
-              <h3 className="font-bold text-slate-700 mb-1">เลือกใบงานเพื่อดูรายละเอียด</h3>
-              <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                กดเลือกใบงานนัดหมายจากรายการด้านซ้ายเพื่อสแกนอุปกรณ์ ติดตามงานนัด หรืออัปเดต Google Calendar
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* CREATE JOB FULL DIALOG (MODAL OVERLAY) */}
       {showCreateForm && (
