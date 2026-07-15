@@ -100,7 +100,9 @@ body {
 .dark .border-slate-100,
 .dark .border-slate-200,
 .dark .border-slate-300,
-.dark .border-slate-250 {
+.dark .border-slate-250,
+.dark header,
+.dark nav {
   border-color: #1b3166 !important;
 }
 
